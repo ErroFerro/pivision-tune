@@ -1,46 +1,80 @@
+# %%
+# !pip install requests
+# !pip install cv2
+# !pip install mediapipe
+# !pip install pygame
+# !pip install setuptools wheel
+# !pip install playsound
+
+# %%
 #import
 
 import cv2
 import mediapipe as mp
 import time
+import requests
+from requests.auth import HTTPBasicAuth
+from urllib.parse import quote
+from requests.auth import HTTPBasicAuth
 import math
+from playsound import playsound
 import os
 import pygame
 import numpy as np
+import io
 
+
+# %%
 # pygame player
 
 pygame.init()
 pygame.mixer.init()
 
-#se la musica è in pausa
+#variabili globali 
+
 is_paused=False
-
-# Specifica il percorso della cartella
-music_folder = './music'
-
-#salva la musica nella cartella
-playlist = [f for f in os.listdir(music_folder) if f.endswith((".mp3", ".wav"))]*3
-
-# Indice del brano corrente
+playlist = []
 current_song_index = 0
-
-# Volume iniziale (da 0.0 a 1.0)
 volume = 0.5
+
+
+def cerca_canzoni(lista_titoli):
+    global playlist
+    playlist = []
+    
+    for titolo in lista_titoli:
+        url = f"https://api.deezer.com/search?q={titolo}"
+        risposta = requests.get(url)
+        dati = risposta.json()
+        
+        if dati['data']:
+            brano = dati['data'][0]
+            info = {
+                "titolo": brano['title'],
+                "artista": brano['artist']['name'],
+                "preview_url": brano['preview']
+            }
+            playlist.append(info)
+            print(f"🎶 Aggiunto: {info['titolo']} - {info['artista']}")
+        else:
+            print(f"⚠️ Nessun risultato per: {titolo}")
 
 def load_song(index):
     global volume
     if 0 <= index < len(playlist):
-        song_path = os.path.join(music_folder, playlist[index])
-        pygame.mixer.music.load(song_path)
-        pygame.mixer.music.set_volume(volume)
-        pygame.mixer.music.play()
-        print(f"🎵 Riproduzione: {playlist[index]}")
+        url = playlist[index]['preview_url']
+        risposta = requests.get(url)
+        if risposta.status_code == 200:
+            audio = io.BytesIO(risposta.content)
+            pygame.mixer.music.load(audio)
+            pygame.mixer.music.set_volume(volume)
+            pygame.mixer.music.play()
+            print(f"▶️ Riproduzione: {playlist[index]['titolo']} - {playlist[index]['artista']}")
+        else:
+            print("❌ Errore nel caricamento della preview.")
     else:
-        print("❌ Indice canzone fuori range!")
+        print("❌ Indice fuori range.")
 
-# Carica la prima canzone
-load_song(current_song_index)
         
 def play_pause():
     global is_paused
@@ -56,32 +90,26 @@ def play_pause():
     
 
 
-def unpause():
-    pygame.mixer.music.unpause()
-    print("▶️ Ripresa")
+# def unpause():
+#     pygame.mixer.music.unpause()
+#     print("▶️ Ripresa")
 
 # def stop():
 #     pygame.mixer.music.stop()
 #     print("⏹️ Stop")
 
 def next_song():
-    global is_paused
-    global current_song_index
+    global current_song_index, is_paused
     current_song_index = (current_song_index + 1) % len(playlist)
-    print(current_song_index)
-    print((current_song_index + 1) % len(playlist))
     load_song(current_song_index)
-    pygame.mixer.music.play()
-    is_paused=0
+    is_paused = False
     
 
 def previous_song():
-    global is_paused
-    global current_song_index
+    global current_song_index, is_paused
     current_song_index = (current_song_index - 1) % len(playlist)
     load_song(current_song_index)
-    pygame.mixer.music.play()
-    is_paused=0
+    is_paused = False
 
 def volume_up():
     global volume
@@ -97,12 +125,27 @@ def volume_down():
     print("volume",volume)
     # print(f"🔉 Volume: {int(volume * 100)}%")
 
+
+
+# %%
+# avvia playlist
+#Per creare una playlist bisogna inserire i titoli e il cantante\gruppo della canzone nella lista sottostante, avviando il codice si avrá la
+# possibilitá di riprodurre le canzoni per 30 secondi (preview versione demo)
+titoli = ["Bohemian Rhapsody Queen",
+          "Around the World Daft Punk",
+            "Blinding Lights The Weeknd",
+            "Imagine John Lennon"]
+    
+cerca_canzoni(titoli)
+load_song(current_song_index)
+is_paused = False
+
+# %%
 # gesture recognition functions
 
 # creazione di una zona di azione per la mano, meglio utilizzare 2 elementi: distanza tra polso e base medio e distanza tra polso e punta del pollice
 # la zona di azione deve essere compresa tra i 50 e gli 80cm dalla telecamera
 
-# LA ZONA DI AZIONE DOVREBBE ESSERE SOLO NELLA METÁ SUPERIORE DELLA RIPRESA?
 min_dist_medio = 0.15 
 min_dist_pollice = 0.20
 min_dist_nocche=0.1
@@ -135,8 +178,7 @@ def zona_attiva(hand_landmarks):
             
     # and\
     #     dist_nocche>get_min_dist_nocche(hand_landmarks):
-        return True
-    return False
+            return True
 
 
 def check_open_hand(hand_landmarks):
@@ -190,6 +232,29 @@ def check_thumbs_down(hand_landmarks):
     other_y = [all_y[0]]+all_y[5:] #all other joints 
     
     return max(other_y)<min(thumb_y) and not check_open_hand2(hand_landmarks)
+    # all_x = [lm.x for lm in hand_landmarks.landmark]
+    
+    # new
+    
+    # first3= all_x[0:3]
+
+    # indici_mid_nocche=[6, 10, 14, 18]
+    # mid_nocche=[all_x[i] for i in indici_mid_nocche]
+
+    # indici_nocche=[5, 9, 13, 17]
+    # nocche=[all_x[i] for i in indici_nocche]
+
+    # indici_tips=[8, 12, 16, 20]
+    # tips=[all_x[i] for i in indici_tips]
+
+    #con nocche frontali
+    # dita_chiuse1 = any(
+    #     all_x[tip] < max(all_x[nocca], all_x[midnocca]) and
+    #     all_x[tip] > min(all_x[nocca], all_x[midnocca])
+    #     for midnocca, tip, nocca in zip(indici_mid_nocche, indici_tips, indici_nocche)
+    # )
+    #con nocche laterali
+
 
 def check_thumbs_rx(hand_landmarks):
     all_y = [lm.y for lm in hand_landmarks.landmark]
@@ -354,9 +419,84 @@ def check_open_hand2(hand_landmarks):
     # Consideriamo la mano aperta se almeno 4 dita sono aperte (puoi cambiare a 5 per essere più preciso)
     return open_fingers >= 2
 
+
+
+# ------------funzioni di riconoscimento dito su dito giù-------------
+
+# def check_thumbs_down(hand_landmarks):
+#     all_y = [lm.y for lm in hand_landmarks.landmark]
+    
+#     if all(hand_landmarks.landmark[7].y > all_y[a] for a in list(range(0,7))) and\
+#         all(hand_landmarks.landmark[7].y > all_y[a] for a in list(range(9,21))) and\
+#             abs(hand_landmarks.landmark[7].x-hand_landmarks.landmark[0].x)<0.1:
+#         return True
+#     else:
+#         return False
+
+# def check_thumbs_up(hand_landmarks):
+#     all_y = [lm.y for lm in hand_landmarks.landmark]
+    
+#     if all(hand_landmarks.landmark[7].y < all_y[a] for a in list(range(0,7))) and\
+#         all(hand_landmarks.landmark[7].y < all_y[a] for a in list(range(9,21))) and\
+#             abs(hand_landmarks.landmark[7].x-hand_landmarks.landmark[0].x)<0.1:
+#         return True
+#     else:
+#         return False
+
+
+# def check_thumbs_up_old(hand_landmarks):
+#     all_y = [lm.y for lm in hand_landmarks.landmark]
+#     all_x = [lm.x for lm in hand_landmarks.landmark]
+    
+#     thumb_y = all_y[3:5]
+#     other_y = all_y[5:] #but not 0
+
+#     indici_mid_nocche=[6, 10, 14, 18]
+#     mid_nocche=[all_x[i] for i in indici_mid_nocche]
+
+#     indici_nocche=[5, 9, 13, 17]
+#     nocche=[all_x[i] for i in indici_nocche]
+
+#     indici_tips=[8, 12, 16, 20]
+#     tips=[all_x[i] for i in indici_tips]
+
+#     # dita_chiuse = all(
+#     #     all_x[tip] > all_x[nocca]
+#     #     for tip, nocca in zip(indici_tips, indici_nocche)
+#     # )
+        
+#     #le tip devono essere comprese tra nocche e mid nocche
+#     dita_chiuse = all(
+#         all_x[tip] < max(all_x[nocca], all_x[midnocca]) and
+#         all_x[tip] > min(all_x[nocca], all_x[midnocca])
+#         for midnocca, tip, nocca in zip(indici_mid_nocche, indici_tips, indici_nocche)
+#     )
+
+
+#     if max(thumb_y) < min(other_y) and\
+#         dita_chiuse and\
+#         abs(hand_landmarks.landmark[4].x - hand_landmarks.landmark[17].x) < 0.2:
+#         return True
+#     else:
+#         return False
+
+# %% [markdown]
+# #### Codice per controllare la musica tramite gesture
+# - Per stoppare il codice premere `q` o, in caso non funzionasse, `restarta` il kernel
+
+# %%
 cooldown = 0.7 # Tempo di attesa tra i comandi (in secondi)
 detection_delay = 0.4 # Delay prima di eseguire l'azione dopo il riconoscimento del gesto (in secondi)
+
+# Varibile della telecamera, se si hanno più telecamere bisogna cambiare il numero, 0 è la telecamera principale, 1 la seconda, 2 la terza e cosí via
 cam=0
+
+
+# %% [markdown]
+# 
+
+# %%
+#Er codice
 
 # Variabili globali
 last_trigger_time = 0
@@ -372,12 +512,10 @@ last_gesture = None
 
 
 # Percorsi dei file audio per i feedback sonori
-# Sostituisci questi percorsi con i file audio reali sul tuo sistema
-
-path_start_sound = r"feedbacksounds/start_1.mp3"
-path_start_1 = r"feedbacksounds/start_1.mp3"
+path_start_sound = "feedbacksounds/start_1.mp3"
+path_start_1 = "feedbacksounds/start_1.mp3"
 path_start_i="feedbacksounds/vol_{i}.mp3"
-path_completed_sound = r"feedbacksounds/stop.mp3"
+path_completed_sound = "feedbacksounds/stop.mp3"
 
 # Initialize pygame mixer
 pygame.mixer.init()
@@ -601,3 +739,8 @@ while cap.isOpened():
 
 cap.release()
 cv2.destroyAllWindows()
+
+# %%
+
+
+
